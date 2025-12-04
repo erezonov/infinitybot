@@ -63,7 +63,7 @@ services:
             elasticsearch:
                 condition: service_healthy
         volumes:
-          - /home/rezonov/InfinityBot/gamebot/resources/filebeat.yml:/usr/share/filebeat/filebeat.yml
+          - ./resources/filebeat.yml:/usr/share/filebeat/filebeat.yml
           - ./logs/:/logs/
         networks:
           - elk
