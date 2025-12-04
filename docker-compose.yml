@@ -1,0 +1,91 @@
+version: '3.9'
+
+services:
+  db:
+    image: postgres:15
+    container_name: gamebot_db
+    restart: always
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: gamebot
+    volumes:
+      - pg-data:/var/lib/postgresql/data
+    ports:
+      - "5441:5432"
+    networks:
+      - elk
+  bot:
+    image: golang:1.23-bullseye     # вместо build: .
+    working_dir: /app
+    volumes:
+      - .:/app                      # монтируем текущую папку с кодом
+    restart: always
+    depends_on:
+      - db
+    environment:
+      DATABASE_URL: postgres://postgres:postgres@db:5432/gamebot?sslmode=disable
+      LOGSTASH_HOST: logstash:5044
+      BOT_TOKEN: your_telegram_token_here
+      VK_TOKEN: vk1.a.5ETk6puyGKE5Yp7SMFCUtipMCykpaiPtNoNDtiWcYx0uso5yBlz7z8vtnBewRuhbIl4j5Ta-LvNDbR6oBDO6ASPno_CpjSePlehzIybudJx3bilVEmZcTi2Tyycf9slKc1takfDosL4nWejU9vAPFzBVl7fHx-teIz-EJCa8FEnmyAJBwZTqINpJcKJxO7w6Kop4zzSS4hQorol9Huw3Jw
+      BOT_PLATFORM: vk
+    command: ["go", "run", "."]     # вместо ./gamebot
+    ports:
+      - "8091:8080"
+    networks:
+      - elk
+  elasticsearch:
+        image: docker.elastic.co/elasticsearch/elasticsearch:7.6.2
+        volumes:
+          - /home/rezonov/InfinityBot/gamebot/resources/elasticsearch.yml:/usr/share/elasticsearch/config/elasticsearch.yml
+        healthcheck:
+            test: ["CMD", "curl", "-s", "-f", "http://localhost:9200/_cat/health"]
+            interval: 3s
+            timeout: 3s
+            retries: 10
+        ports:
+            - 9200:9200
+        networks:
+          - elk
+  logstash:
+        image: docker.elastic.co/logstash/logstash:7.6.2
+        volumes:
+            - ./resources/logstash.conf:/usr/share/logstash/pipeline/logstash.conf:ro
+        depends_on:
+            elasticsearch:
+                condition: service_healthy
+
+        ports:
+          - 5044:5044
+        networks:
+          - elk
+  filebeat:
+        image: docker.elastic.co/beats/filebeat:6.5.1
+        depends_on:
+            elasticsearch:
+                condition: service_healthy
+        volumes:
+          - /home/rezonov/InfinityBot/gamebot/resources/filebeat.yml:/usr/share/filebeat/filebeat.yml
+          - ./logs/:/logs/
+        networks:
+          - elk
+  kibana:
+        image: docker.elastic.co/kibana/kibana:7.6.2
+        depends_on:
+            elasticsearch:
+                condition: service_healthy
+        healthcheck:
+            test: ["CMD", "curl", "-s", "-f", "http://localhost:5601/api/status"]
+            interval: 3s
+            timeout: 3s
+            retries: 50
+        ports:
+            - 5601:5601
+
+        networks:
+          - elk
+networks:
+  elk:
+    driver: bridge
+volumes:
+  pg-data:
